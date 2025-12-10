@@ -1,98 +1,173 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { 
+  View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, ScrollView, ActivityIndicator 
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useCart } from '../../context/CartContext'; 
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+// --- FIREBASE ---
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../firebaseConfig'; // Asegúrate de que la ruta sea correcta
+
+// Tipo de dato Producto
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  image: string;
+  description?: string;
+}
+
+const CATEGORIES = ['Todos', 'Calzado', 'Ropa', 'Accesorios', 'Tech'];
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const { items, addItem } = useCart();
+  const router = useRouter();
+  
+  const [selectedCat, setSelectedCat] = useState('Todos');
+  const [searchText, setSearchText] = useState('');
+  
+  // Estado para los productos de la nube
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  // Cargar productos al abrir la pantalla
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        // Buscamos en la colección "products" de tu Firebase
+        const querySnapshot = await getDocs(collection(db, "products"));
+        const productsList: Product[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          // Guardamos cada producto con su ID de la nube
+          productsList.push({ id: doc.id, ...doc.data() } as Product);
+        });
+
+        setProducts(productsList);
+      } catch (error) {
+        console.error("Error obteniendo productos: ", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  // Filtros (Categoría + Buscador)
+  const filteredProducts = products.filter((product) => {
+    const categoryMatch = selectedCat === 'Todos' || product.category === selectedCat;
+    // Validación segura por si el nombre viene vacío
+    const nameMatch = product.name ? product.name.toLowerCase().includes(searchText.toLowerCase()) : false;
+    return categoryMatch && nameMatch;
+  });
+
+  const renderProduct = ({ item }: { item: Product }) => (
+    <TouchableOpacity 
+      style={styles.cardContainer}
+      onPress={() => router.push(`/product/${item.id}`)}
+      activeOpacity={0.9}
+    >
+      <View style={styles.card}>
+        <Image source={{ uri: item.image }} style={styles.image} resizeMode="cover" />
+        <View style={styles.info}>
+          <Text style={styles.categoryTag}>{item.category}</Text>
+          <Text style={styles.prodName} numberOfLines={1}>{item.name}</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.price}>Q{item.price.toFixed(2)}</Text>
+            <TouchableOpacity style={styles.addBtn} onPress={() => addItem(item)}>
+              <Ionicons name="add" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={20} color="#888" />
+          <TextInput 
+            placeholder="Buscar productos..." 
+            style={styles.searchInput}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+        </View>
+        <TouchableOpacity onPress={() => router.push('/modal-cart')} style={styles.cartBtn}>
+          <Ionicons name="cart-outline" size={24} color="#333" />
+          {items.length > 0 && <View style={styles.badge} />}
+        </TouchableOpacity>
+      </View>
+
+      {/* Categorías */}
+      <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
+          {CATEGORIES.map((cat, index) => (
+            <TouchableOpacity 
+              key={index} 
+              onPress={() => setSelectedCat(cat)}
+              style={[styles.catChip, selectedCat === cat && styles.catChipActive]}>
+              <Text style={[styles.catText, selectedCat === cat && styles.catTextActive]}>{cat}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Lista de Productos con Loading */}
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#000" />
+          <Text style={{ marginTop: 10 }}>Cargando catálogo...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredProducts}
+          keyExtractor={(item) => item.id}
+          renderItem={renderProduct}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <Text style={{textAlign: 'center', marginTop: 20, color: '#999'}}>
+               No hay productos disponibles.
+            </Text>
+          }
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+  container: { flex: 1, backgroundColor: '#F4F6F8', paddingTop: 50 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 15, alignItems: 'center', gap: 10 },
+  searchBar: { flex: 1, flexDirection: 'row', backgroundColor: '#fff', padding: 10, borderRadius: 12, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+  searchInput: { marginLeft: 10, flex: 1, fontSize: 16 },
+  cartBtn: { padding: 10, backgroundColor: '#fff', borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+  badge: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: 'red' },
+  catScroll: { paddingHorizontal: 20, marginBottom: 15 },
+  catChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', marginRight: 10, borderWidth: 1, borderColor: '#eee' },
+  catChipActive: { backgroundColor: '#333', borderColor: '#333' },
+  catText: { color: '#666', fontWeight: '600' },
+  catTextActive: { color: '#fff' },
+  listContent: { paddingHorizontal: 15, paddingBottom: 20 },
+  row: { justifyContent: 'space-between' },
+  cardContainer: { width: '48%', marginBottom: 15 },
+  card: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
+  image: { width: '100%', height: 140, backgroundColor: '#eee' },
+  info: { padding: 12 },
+  categoryTag: { fontSize: 10, color: '#888', textTransform: 'uppercase', marginBottom: 2 },
+  prodName: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 6 },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  price: { fontSize: 16, fontWeight: '800', color: '#2ecc71' },
+  addBtn: { backgroundColor: '#333', padding: 6, borderRadius: 8 },
 });

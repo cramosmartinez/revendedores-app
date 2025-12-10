@@ -1,10 +1,8 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useColorScheme } from '@/hooks/useColorScheme'; // O tus imports actuales
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -12,24 +10,33 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
-        tabBarButton: HapticTab,
+        tabBarActiveTintColor: '#007AFF', // Color activo (azul)
+        tabBarStyle: Platform.select({
+          ios: { position: 'absolute' },
+          default: {},
+        }),
       }}>
+      
+      {/* TAB 1: CATÁLOGO */}
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Catálogo',
+          tabBarIcon: ({ color }) => <Ionicons size={28} name="grid" color={color} />,
         }}
       />
+
+      {/* TAB 2: PERFIL */}
       <Tabs.Screen
-        name="explore"
+        name="profile"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Mi Negocio',
+          tabBarIcon: ({ color }) => <Ionicons size={28} name="person" color={color} />,
         }}
       />
+
+      {/* SI TIENES EL ARCHIVO explore.tsx, BÓRRALO DE LA CARPETA TAMBIÉN */}
     </Tabs>
   );
 }

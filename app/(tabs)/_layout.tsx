@@ -1,42 +1,46 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useColorScheme } from '@/hooks/useColorScheme'; // O tus imports actuales
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#007AFF', // Color activo (azul)
-        tabBarStyle: Platform.select({
-          ios: { position: 'absolute' },
-          default: {},
-        }),
+        tabBarActiveTintColor: '#000', // Color activo (negro)
+        tabBarInactiveTintColor: '#ccc', // Color inactivo (gris)
+        tabBarStyle: {
+            height: 60, // Altura cómoda
+            paddingBottom: 10,
+            paddingTop: 10,
+        },
+        tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: '600'
+        }
       }}>
       
-      {/* TAB 1: CATÁLOGO */}
+      {/* BOTÓN 1: CATÁLOGO */}
       <Tabs.Screen
         name="index"
         options={{
           title: 'Catálogo',
-          tabBarIcon: ({ color }) => <Ionicons size={28} name="grid" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons size={24} name={focused ? "grid" : "grid-outline"} color={color} />
+          ),
         }}
       />
 
-      {/* TAB 2: PERFIL */}
+      {/* BOTÓN 2: PERFIL */}
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Mi Negocio',
-          tabBarIcon: ({ color }) => <Ionicons size={28} name="person" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons size={24} name={focused ? "person" : "person-outline"} color={color} />
+          ),
         }}
       />
-
-      {/* SI TIENES EL ARCHIVO explore.tsx, BÓRRALO DE LA CARPETA TAMBIÉN */}
     </Tabs>
   );
 }

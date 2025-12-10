@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import { getStorage } from "firebase/storage"; // 1. Agrega este import arriba
 import { getFirestore } from "firebase/firestore";
 
 // Tu configuración real de Firebase
@@ -16,3 +17,4 @@ const app = initializeApp(firebaseConfig);
 
 // Exportamos la base de datos para usarla en la app
 export const db = getFirestore(app);
+export const storage = getStorage(app); // 2. ¡AGREGA ESTA LÍNEA!

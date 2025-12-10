@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, ScrollView, ActivityIndicator 
+  View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, ScrollView, ActivityIndicator, ListRenderItem 
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCart } from '../../context/CartContext'; 
-
-// --- FIREBASE ---
 import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../firebaseConfig'; // Asegúrate de que la ruta sea correcta
+import { db } from '../../firebaseConfig'; 
 
-// Tipo de dato Producto
+// 1. DEFINIR TIPO
 interface Product {
   id: string;
   name: string;
@@ -28,24 +26,17 @@ export default function HomeScreen() {
   
   const [selectedCat, setSelectedCat] = useState('Todos');
   const [searchText, setSearchText] = useState('');
-  
-  // Estado para los productos de la nube
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Cargar productos al abrir la pantalla
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        // Buscamos en la colección "products" de tu Firebase
         const querySnapshot = await getDocs(collection(db, "products"));
         const productsList: Product[] = [];
-        
         querySnapshot.forEach((doc) => {
-          // Guardamos cada producto con su ID de la nube
           productsList.push({ id: doc.id, ...doc.data() } as Product);
         });
-
         setProducts(productsList);
       } catch (error) {
         console.error("Error obteniendo productos: ", error);
@@ -53,19 +44,17 @@ export default function HomeScreen() {
         setLoading(false);
       }
     };
-
     fetchProducts();
   }, []);
 
-  // Filtros (Categoría + Buscador)
   const filteredProducts = products.filter((product) => {
     const categoryMatch = selectedCat === 'Todos' || product.category === selectedCat;
-    // Validación segura por si el nombre viene vacío
     const nameMatch = product.name ? product.name.toLowerCase().includes(searchText.toLowerCase()) : false;
     return categoryMatch && nameMatch;
   });
 
-  const renderProduct = ({ item }: { item: Product }) => (
+  // 2. USAR EL TIPO AQUÍ PARA QUE NO DE ERROR
+  const renderProduct: ListRenderItem<Product> = ({ item }) => (
     <TouchableOpacity 
       style={styles.cardContainer}
       onPress={() => router.push(`/product/${item.id}`)}
@@ -89,7 +78,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.searchBar}>
           <Ionicons name="search" size={20} color="#888" />
@@ -106,7 +94,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Categorías */}
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
           {CATEGORIES.map((cat, index) => (
@@ -120,7 +107,6 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
 
-      {/* Lista de Productos con Loading */}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#000" />

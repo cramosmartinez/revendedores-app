@@ -1,12 +1,14 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { 
+  View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl 
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
-
-// --- FIREBASE ---
 import { getAuth, signOut } from 'firebase/auth';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+
+const ADMIN_EMAIL = "test@correo.com"; 
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -17,34 +19,28 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Función para descargar el historial del usuario logueado
   const fetchMyOrders = async () => {
     if (!user) return;
     try {
-      // Consulta: "Dame los pedidos donde userId sea igual al mío, ordenados por fecha"
       const q = query(
         collection(db, "orders"), 
         where("userId", "==", user.uid),
         orderBy("date", "desc")
       );
-      
       const querySnapshot = await getDocs(q);
       const misPedidos: any[] = [];
       querySnapshot.forEach((doc) => {
         misPedidos.push({ id: doc.id, ...doc.data() });
       });
-
       setOrders(misPedidos);
     } catch (e) {
       console.error("Error cargando historial:", e);
-      // Nota: Si te sale error de "index", revisa la consola, a veces Firebase pide crear un índice
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  // Cargar cada vez que entramos a la pantalla (por si hizo un pedido nuevo)
   useFocusEffect(
     useCallback(() => {
       fetchMyOrders();
@@ -58,9 +54,9 @@ export default function ProfileScreen() {
     ]);
   };
 
-  // Cálculos reales
   const totalVendido = orders.reduce((sum, order) => sum + (order.total || 0), 0);
   const totalPedidos = orders.length;
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   return (
     <ScrollView 
@@ -75,10 +71,10 @@ export default function ProfileScreen() {
       <View style={styles.profileCard}>
         <Image source={{ uri: `https://api.dicebear.com/7.x/avataaars/png?seed=${user?.email}` }} style={styles.avatar} />
         <View style={{flex:1}}>
-          <Text style={styles.name} numberOfLines={1}>{user?.email?.split('@')[0]}</Text>
+          <Text style={styles.name} numberOfLines={1}>{user?.displayName || user?.email?.split('@')[0] || "Usuario"}</Text>
           <Text style={styles.emailSub}>{user?.email}</Text>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>Socio Verificado ✅</Text>
+            <Text style={styles.badgeText}>{isAdmin ? "Administrador 👑" : "Socio Verificado ✅"}</Text>
           </View>
         </View>
       </View>
@@ -103,7 +99,7 @@ export default function ProfileScreen() {
         ) : orders.length === 0 ? (
           <View style={{ padding: 20, alignItems: 'center' }}>
             <Ionicons name="cloud-offline-outline" size={40} color="#ccc" />
-            <Text style={{ color: '#999', marginTop: 10 }}>Sin historial en la nube.</Text>
+            <Text style={{ color: '#999', marginTop: 10 }}>Sin historial disponible.</Text>
           </View>
         ) : (
           orders.map((order) => (
@@ -123,11 +119,19 @@ export default function ProfileScreen() {
         )}
       </View>
       
-      <View style={{ paddingHorizontal: 20, marginTop: 20, marginBottom: 50 }}>
+      <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
             <Text style={styles.logoutText}>Cerrar Sesión</Text>
         </TouchableOpacity>
+
+        {isAdmin && (
+          <TouchableOpacity style={styles.adminBtn} onPress={() => router.push('/admin/add')}>
+            <Ionicons name="settings-sharp" size={18} color="#444" style={{marginRight: 8}}/>
+            <Text style={styles.adminText}>PANEL ADMIN: AGREGAR PRODUCTO</Text>
+          </TouchableOpacity>
+        )}
       </View>
+      <View style={{height: 50}} />
     </ScrollView>
   );
 }
@@ -155,5 +159,7 @@ const styles = StyleSheet.create({
   orderSub: { color: '#888', fontSize: 12 },
   orderPrice: { fontWeight: 'bold', color: '#2ecc71', fontSize: 16 },
   logoutBtn: { padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#FFEBEE', alignItems: 'center', backgroundColor: '#FFF' },
-  logoutText: { color: '#D32F2F', fontWeight: '600' }
+  logoutText: { color: '#D32F2F', fontWeight: '600' },
+  adminBtn: { marginTop: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E0E0E0', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#ccc', borderStyle: 'dashed' },
+  adminText: { color: '#444', fontSize: 12, fontWeight: 'bold', letterSpacing: 1 }
 });

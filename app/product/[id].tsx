@@ -4,29 +4,35 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCart } from '../../context/CartContext';
 
-// --- FIREBASE IMPORTS ---
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../firebaseConfig'; // Importamos la conexión que acabas de crear
+// --- FIREBASE ---
+import { doc, getDoc, deleteDoc } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { db } from '../../firebaseConfig';
+
+// ¡IMPORTANTE! Pon aquí EL MISMO correo que pusiste en profile.tsx
+const ADMIN_EMAIL = "test@correo.com"; 
 
 export default function ProductDetailScreen() {
-  const { id } = useLocalSearchParams(); // Capturamos el ID que viene de la lista
+  const { id } = useLocalSearchParams();
   const router = useRouter();
   const { addItem } = useCart();
   
+  // Verificamos si es admin
+  const auth = getAuth();
+  const user = auth.currentUser;
+  const isAdmin = user?.email === ADMIN_EMAIL;
+
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // EFECTO: Buscar el producto en la nube
   useEffect(() => {
     const fetchProduct = async () => {
       if (!id) return;
       try {
-        // Referencia al documento específico en la colección "products"
         const docRef = doc(db, "products", id as string);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-          // Si existe, guardamos sus datos en el estado
           setProduct({ id: docSnap.id, ...docSnap.data() });
         } else {
           Alert.alert("Error", "Este producto ya no existe.");
@@ -34,14 +40,38 @@ export default function ProductDetailScreen() {
         }
       } catch (e) {
         console.error("Error cargando producto:", e);
-        Alert.alert("Error", "No se pudo conectar con el servidor.");
       } finally {
         setLoading(false);
       }
     };
-
     fetchProduct();
   }, [id]);
+
+  // Función para borrar
+  const handleDelete = async () => {
+    Alert.alert(
+      "Eliminar Producto",
+      "¿Seguro que quieres borrarlo? No se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { 
+          text: "Sí, Borrar", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await deleteDoc(doc(db, "products", id as string));
+              Alert.alert("Listo", "Producto eliminado.");
+              router.replace('/(tabs)'); 
+            } catch (e) {
+              Alert.alert("Error", "No tienes permiso o falló la red.");
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleAddToCart = () => {
     if (product) {
@@ -63,11 +93,22 @@ export default function ProductDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Título dinámico en la barra superior */}
-      <Stack.Screen options={{ title: product.name || 'Detalle', headerBackTitle: 'Volver', headerTintColor: '#000' }} />
+      {/* Header Configurable */}
+      <Stack.Screen 
+        options={{ 
+          title: product.name || 'Detalle', 
+          headerBackTitle: 'Volver', 
+          headerTintColor: '#000',
+          // Mostramos la basura SOLO si es admin
+          headerRight: () => isAdmin ? (
+            <TouchableOpacity onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={24} color="red" />
+            </TouchableOpacity>
+          ) : null
+        }} 
+      />
 
       <ScrollView>
-        {/* Imagen (con fallback por si no tiene) */}
         <Image 
           source={{ uri: product.image || 'https://via.placeholder.com/400' }} 
           style={styles.image} 
@@ -102,7 +143,6 @@ export default function ProductDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Botón Flotante */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.btn} onPress={handleAddToCart}>
           <Text style={styles.btnText}>Agregar - Q{product.price ? product.price.toFixed(2) : '0'}</Text>

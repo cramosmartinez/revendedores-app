@@ -5,9 +5,7 @@ import {
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
-// --- FIREBASE AUTH ---
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
-// Importamos 'db' solo para asegurar que la app inicialice Firebase correctamente
 import { db } from '../firebaseConfig'; 
 
 const auth = getAuth(); 
@@ -19,7 +17,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [checkingUser, setCheckingUser] = useState(true);
 
-  // Verificar si ya hay una sesión iniciada (Auto-Login)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -39,14 +36,11 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // Si el login es correcto, el useEffect de arriba nos redirigirá solo.
     } catch (error: any) {
       setLoading(false);
       let msg = "Error al iniciar sesión";
       if (error.code === 'auth/invalid-credential') msg = "Correo o contraseña incorrectos.";
       if (error.code === 'auth/invalid-email') msg = "El formato del correo no es válido.";
-      if (error.code === 'auth/user-not-found') msg = "Usuario no encontrado.";
-      if (error.code === 'auth/wrong-password') msg = "Contraseña incorrecta.";
       Alert.alert("Ups", msg);
     }
   };
@@ -116,7 +110,7 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* --- ENLACE AL REGISTRO --- */}
+        {/* ENLACE AL REGISTRO */}
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>¿No tienes cuenta?</Text>
           <TouchableOpacity onPress={() => router.push('/register')}>
@@ -132,26 +126,20 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  
   headerBackground: { height: '40%', justifyContent: 'center', alignItems: 'center', position: 'relative' },
   headerImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
-  
   title: { fontSize: 36, fontWeight: 'bold', color: '#fff', marginTop: 20 },
   subtitle: { fontSize: 16, color: '#ddd', marginTop: 5 },
-  
   formContainer: { flex: 1, backgroundColor: '#fff', marginTop: -30, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 30, alignItems: 'center' },
-  
   welcomeText: { fontSize: 24, fontWeight: 'bold', color: '#333', marginBottom: 30, alignSelf: 'flex-start' },
-  
   inputGroup: { width: '100%', marginBottom: 20 },
   label: { fontSize: 14, color: '#666', marginBottom: 8, fontWeight: '600' },
   input: { backgroundColor: '#F5F6FA', padding: 15, borderRadius: 12, fontSize: 16, borderWidth: 1, borderColor: '#EFEFEF' },
-  
   loginBtn: { width: '100%', backgroundColor: '#111', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 10, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
   loginText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  
-  // --- ¡AQUÍ ESTÁN LOS ESTILOS QUE FALTABAN! ---
+
+  // --- AQUÍ ESTABA EL ERROR: AGREGAMOS LOS ESTILOS FALTANTES ---
   footerRow: { 
     flexDirection: 'row', 
     marginTop: 20, 

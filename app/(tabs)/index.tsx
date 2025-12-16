@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  View, Text, FlatList, Image, TouchableOpacity, StyleSheet, TextInput, ScrollView, ActivityIndicator, Platform, Alert, Modal
+  View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, ScrollView, ActivityIndicator, Alert, Modal
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router'; 
 import { Ionicons } from '@expo/vector-icons';
-import { CameraView, Camera } from "expo-camera"; // Importamos la cámara
+import { CameraView, Camera } from "expo-camera";
 
 // --- FIREBASE IMPORTS ---
 import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
@@ -17,13 +17,42 @@ interface Product {
   price: number;
   stock?: number;
   category: string;
-  image: string;
   description?: string;
   cost?: number; 
-  barcode?: string; // <-- Nuevo campo
+  barcode?: string;
 }
 
 const CATEGORIES = ['Todos', 'Calzado', 'Ropa', 'Accesorios', 'Tech', 'Hogar'];
+
+// --- NUEVA FUNCIÓN DE COLOR INTELIGENTE ---
+// Genera un color único basado en TODO el nombre, no solo la inicial.
+const getColorForName = (name: string) => {
+    if (!name) return '#333';
+    
+    // Paleta de colores modernos (Material UI / Flat)
+    const colors = [
+        '#e55039', // Rojo tomate
+        '#4a69bd', // Azul oscuro
+        '#60a3bc', // Azul acero
+        '#78e08f', // Verde menta
+        '#f6b93b', // Amarillo ocre
+        '#b71540', // Carmesí
+        '#0c2461', // Azul noche
+        '#079992', // Verde azulado
+        '#e58e26', // Naranja quemado
+        '#82ccdd', // Celeste
+    ];
+
+    let hash = 0;
+    // Algoritmo de hash simple para convertir el string en un número
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    // Aseguramos que sea positivo y elegimos un color
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
+};
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -39,13 +68,11 @@ export default function HomeScreen() {
   const [scanned, setScanned] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
 
-  // 1. OBTENER CONTEO
   const updateCartCount = useCallback(() => {
     const currentCart = (globalThis as any).cart || [];
     setCartCount(currentCart.length);
   }, []);
   
-  // 2. CARGA DE PRODUCTOS
   useEffect(() => {
     const auth = getAuth();
     let unsubscribeSnapshot: (() => void) | undefined;
@@ -72,7 +99,6 @@ export default function HomeScreen() {
       }
     });
 
-    // Pedir permisos de cámara al iniciar
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
       setHasPermission(status === "granted");
@@ -84,14 +110,12 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // 3. ACTUALIZAR AL ENFOCAR
   useFocusEffect(
     useCallback(() => {
       updateCartCount(); 
     }, [updateCartCount])
   );
 
-  // 4. AÑADIR AL CARRITO
   const handleAddToCart = (product: Product) => {
     const productCost = product.cost !== undefined ? product.cost : 0;
     const currentCart = (globalThis as any).cart || [];
@@ -111,23 +135,19 @@ export default function HomeScreen() {
     setCartCount(currentCart.length);
   };
 
-  // --- LÓGICA DEL ESCÁNER ---
   const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
     setScanned(true);
-    setShowCamera(false); // Cerrar cámara
+    setShowCamera(false); 
 
-    // Buscar producto por código
     const foundProduct = products.find(p => p.barcode === data);
 
     if (foundProduct) {
-      // Si existe, añadir al carrito DIRECTAMENTE
       handleAddToCart(foundProduct);
       Alert.alert("¡Encontrado!", `${foundProduct.name} añadido al carrito. 🛒`);
     } else {
       Alert.alert("No encontrado", `El código ${data} no está en tu inventario.`);
     }
 
-    // Resetear escáner después de unos segundos
     setTimeout(() => setScanned(false), 2000);
   };
 
@@ -141,6 +161,10 @@ export default function HomeScreen() {
     const stock = item.stock || 0;
     const isLowStock = stock > 0 && stock < 3; 
     const isOut = stock === 0;
+    
+    // Obtenemos la inicial y el color basado en el nombre completo
+    const initial = item.name ? item.name.charAt(0).toUpperCase() : '?';
+    const avatarColor = getColorForName(item.name);
 
     return (
       <TouchableOpacity 
@@ -149,11 +173,11 @@ export default function HomeScreen() {
         activeOpacity={0.9}
       >
         <View style={styles.card}>
-          <Image 
-            source={{ uri: item.image || 'https://placehold.co/400x400.png' }} 
-            style={[styles.image, isOut && {opacity: 0.6}]} 
-            resizeMode="cover" 
-          />
+          {/* AVATAR DE COLOR */}
+          <View style={[styles.avatarSection, { backgroundColor: isOut ? '#ccc' : avatarColor }]}>
+             <Text style={styles.avatarText}>{initial}</Text>
+          </View>
+
           <View style={styles.info}>
             <View style={{flexDirection:'row', justifyContent:'space-between', alignItems: 'center', marginBottom: 4}}>
                 <Text style={styles.categoryTag}>{item.category}</Text>
@@ -166,7 +190,7 @@ export default function HomeScreen() {
                 </Text>
             </View>
 
-            <Text style={styles.prodName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.prodName} numberOfLines={2}>{item.name}</Text>
             
             <View style={styles.priceRow}>
               <Text style={styles.price}>Q{item.price.toFixed(2)}</Text>
@@ -211,7 +235,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity 
-              onPress={() => router.push('/admin/add')} 
+              onPress={() => router.push('/admin/add')} // Asegúrate que esta ruta sea correcta según tus carpetas
               style={[styles.headerBtn, {backgroundColor: '#000', borderWidth: 0}]}
             >
               <Ionicons name="add" size={26} color="#fff" />
@@ -219,7 +243,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* BUSCADOR + ESCÁNER */}
+      {/* BUSCADOR */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Ionicons name="search" size={20} color="#888" />
@@ -229,7 +253,6 @@ export default function HomeScreen() {
             value={searchText}
             onChangeText={setSearchText}
           />
-          {/* BOTÓN ESCÁNER */}
           <TouchableOpacity onPress={() => {
               setScanned(false);
               setShowCamera(true);
@@ -346,11 +369,25 @@ const styles = StyleSheet.create({
   cardContainer: { width: '48%', marginBottom: 15 },
   
   card: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#f0f0f0' },
-  image: { width: '100%', height: 140, backgroundColor: '#eee' },
+  
+  // AVATAR SECTION
+  avatarSection: { 
+      width: '100%', 
+      height: 100, 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+  },
+  avatarText: {
+      fontSize: 40,
+      fontWeight: 'bold',
+      color: 'white',
+      opacity: 0.95
+  },
+
   info: { padding: 10 },
   categoryTag: { fontSize: 10, color: '#888', textTransform: 'uppercase' },
   stockTag: { fontSize: 10, color: '#666', fontWeight:'600' },
-  prodName: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 4 },
+  prodName: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 4, height: 36 }, 
   
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
   price: { fontSize: 16, fontWeight: 'bold', color: '#000' },
@@ -359,7 +396,6 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', marginTop: 50, paddingHorizontal: 40 },
   emptyText: { fontSize: 18, fontWeight: 'bold', color: '#666', marginTop: 15 },
 
-  // Estilos Cámara
   cameraContainer: { flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' },
   closeCameraBtn: { position: 'absolute', top: 50, right: 20, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, zIndex: 10 },
   scanOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },

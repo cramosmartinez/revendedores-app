@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Modal, Button 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Modal 
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { CameraView, Camera } from "expo-camera"; // Importamos la cámara nueva
+import { CameraView, Camera } from "expo-camera"; 
 
 // --- FIREBASE ---
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -22,14 +22,13 @@ export default function AddProductScreen() {
   const [quantity, setQuantity] = useState('');
   const [category, setCategory] = useState('General');
   const [desc, setDesc] = useState('');
-  const [barcode, setBarcode] = useState(''); // <-- NUEVO: Código de Barras
+  const [barcode, setBarcode] = useState(''); 
 
-  // Estados de la Cámara
+  // Estados de la Cámara (Solo para Escáner)
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
 
-  // 1. PEDIR PERMISOS DE CÁMARA
   useEffect(() => {
     const getCameraPermissions = async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
@@ -38,15 +37,14 @@ export default function AddProductScreen() {
     getCameraPermissions();
   }, []);
 
-  // 2. FUNCIÓN AL ESCANEAR
   const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
     setScanned(true);
-    setBarcode(data); // Guardamos el código leído
-    setShowCamera(false); // Cerramos la cámara
+    setBarcode(data); 
+    setShowCamera(false); 
     Alert.alert("¡Escaneado!", `Código: ${data}`);
   };
 
-  // 3. GUARDAR PRODUCTO
+  // GUARDAR PRODUCTO (VERSIÓN LITE - SIN IMAGEN)
   const handleSave = async () => {
     if (!name || !price || !quantity) {
       Alert.alert("Faltan datos", "Nombre, precio y cantidad son obligatorios.");
@@ -59,6 +57,7 @@ export default function AddProductScreen() {
       const user = auth.currentUser;
       if (!user) return;
 
+      // Limpiamos el objeto para no guardar basura
       await addDoc(collection(db, "products"), {
         userId: user.uid,
         name: name.trim(),
@@ -67,8 +66,8 @@ export default function AddProductScreen() {
         stock: parseInt(quantity),
         category: category,
         description: desc,
-        barcode: barcode, // <-- GUARDAMOS EL CÓDIGO
-        image: '', 
+        barcode: barcode,
+        // image: '',  <-- ELIMINADO: Ya no guardamos este campo
         createdAt: serverTimestamp()
       });
 
@@ -91,12 +90,11 @@ export default function AddProductScreen() {
         }} 
       />
 
-      {/* FORMULARIO */}
       <View style={{paddingTop: 20}}>
         
         {/* SECCIÓN CÓDIGO DE BARRAS */}
         <View style={styles.inputGroup}>
-            <Text style={styles.label}>Código de Barras</Text>
+            <Text style={styles.label}>Código de Barras (Opcional)</Text>
             <View style={{flexDirection: 'row', gap: 10}}>
                 <TextInput 
                     style={[styles.input, {flex: 1}]} 
@@ -173,10 +171,12 @@ export default function AddProductScreen() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Descripción</Text>
           <TextInput 
-            style={[styles.input, {height: 60}]} 
+            style={[styles.input, {height: 80}]} // Un poco más alto ya que no hay foto
             value={desc} 
             onChangeText={setDesc} 
             multiline 
+            textAlignVertical="top"
+            placeholder="Detalles importantes del producto (Talla, Color, Marca...)"
           />
         </View>
 
@@ -193,9 +193,9 @@ export default function AddProductScreen() {
       <Modal visible={showCamera} animationType="slide">
         <View style={styles.cameraContainer}>
             {hasPermission === null ? (
-                <Text>Solicitando permisos...</Text>
+                <Text style={{color:'white'}}>Solicitando permisos...</Text>
             ) : hasPermission === false ? (
-                <Text>Sin acceso a la cámara</Text>
+                <Text style={{color:'white'}}>Sin acceso a la cámara</Text>
             ) : (
                 <CameraView
                     style={StyleSheet.absoluteFillObject}
@@ -205,16 +205,12 @@ export default function AddProductScreen() {
                     }}
                 />
             )}
-            
-            {/* Botón Cerrar Cámara */}
             <TouchableOpacity 
                 style={styles.closeCameraBtn} 
                 onPress={() => setShowCamera(false)}
             >
                 <Ionicons name="close" size={30} color="white" />
             </TouchableOpacity>
-
-            {/* Cuadro guía visual */}
             <View style={styles.scanFrame} />
         </View>
       </Modal>
@@ -230,12 +226,9 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', color: '#666', marginBottom: 8 },
   input: { backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#EEE', borderRadius: 12, padding: 15, fontSize: 16 },
   row: { flexDirection: 'row' },
-  
   scanBtn: { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20, borderRadius: 12 },
   saveBtn: { backgroundColor: '#000', padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10 },
   saveText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
-
-  // Estilos Cámara
   cameraContainer: { flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' },
   closeCameraBtn: { position: 'absolute', top: 50, right: 20, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
   scanFrame: { width: 250, height: 250, borderWidth: 2, borderColor: '#00FF00', backgroundColor: 'transparent' }

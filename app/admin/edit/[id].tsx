@@ -1,252 +1,107 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Image, Platform 
-} from 'react-native';
-import { useRouter, Stack } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../../../firebaseConfig'; 
 
-// --- FIREBASE ---
-import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getAuth, updateProfile, deleteUser, signOut } from 'firebase/auth';
-import { db, storage } from '../../../firebaseConfig'; 
-
-export default function EditProfileScreen() {
+export default function EditProductScreen() {
+  const { id } = useLocalSearchParams(); 
   const router = useRouter();
-  const auth = getAuth();
-  const user = auth.currentUser;
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
 
-  const [loading, setLoading] = useState(false);
-  const [businessName, setBusinessName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [photo, setPhoto] = useState('');
+  // Estados para los campos
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [stock, setStock] = useState('');
+  const [category, setCategory] = useState('');
+  const [desc, setDesc] = useState('');
 
-  // 1. CARGAR DATOS EXISTENTES
+  // 1. Cargar datos actuales
   useEffect(() => {
-    const loadData = async () => {
-      if (!user) return;
-      
+    const fetchProduct = async () => {
+      if (!id) return;
       try {
-        const docRef = doc(db, "users", user.uid);
+        const docRef = doc(db, "products", id as string);
         const docSnap = await getDoc(docRef);
-
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setBusinessName(data.businessName || '');
-          setPhone(data.phone || '');
-          setPhoto(data.photoURL || '');
-        } else {
-          setBusinessName(user.displayName || '');
-          setPhoto(user.photoURL || '');
+          setName(data.name || '');
+          setPrice(data.price ? String(data.price) : '');
+          setStock(data.stock ? String(data.stock) : '');
+          setCategory(data.category || '');
+          setDesc(data.description || '');
         }
       } catch (e) {
-        console.log("Error cargando perfil", e);
+        Alert.alert("Error", "No se pudo cargar el producto");
+      } finally {
+        setLoading(false);
       }
     };
-    loadData();
-  }, []);
+    fetchProduct();
+  }, [id]);
 
-  // 2. ELEGIR LOGO DESDE GALERÍA
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
-
-    if (!result.canceled) {
-      setPhoto(result.assets[0].uri);
-    }
-  };
-
-  // 3. GUARDAR CAMBIOS
-  const handleSave = async () => {
-    if (!user) return;
-    setLoading(true);
-
+  // 2. Guardar cambios
+  const handleUpdate = async () => {
+    setUpdating(true);
     try {
-      let finalPhotoUrl = photo;
-
-      if (photo && !photo.startsWith('http')) {
-        const response = await fetch(photo);
-        const blob = await response.blob();
-        const filename = `profiles/${user.uid}.jpg`;
-        const storageRef = ref(storage, filename);
-        await uploadBytes(storageRef, blob);
-        finalPhotoUrl = await getDownloadURL(storageRef);
-      }
-
-      await updateProfile(user, {
-        displayName: businessName,
-        photoURL: finalPhotoUrl
+      const docRef = doc(db, "products", id as string);
+      await updateDoc(docRef, {
+        name: name,
+        price: parseFloat(price),
+        stock: parseInt(stock),
+        category: category,
+        description: desc
       });
-
-      await setDoc(doc(db, "users", user.uid), {
-        businessName: businessName,
-        phone: phone,
-        photoURL: finalPhotoUrl,
-        email: user.email,
-        updatedAt: new Date()
-      }, { merge: true });
-
-      Alert.alert("¡Éxito!", "Tu perfil de negocio se ha actualizado.");
-      router.replace('/(tabs)/profile');
-
-    } catch (error: any) {
-      console.error(error);
-      Alert.alert("Error", "No se pudo actualizar el perfil. " + error.message);
+      Alert.alert("¡Éxito!", "Producto actualizado");
+      router.back(); // Volver atrás
+    } catch (e) {
+      Alert.alert("Error", "Falló la actualización");
     } finally {
-      setLoading(false);
+      setUpdating(false);
     }
   };
 
-  // 4. ELIMINAR CUENTA (NUEVO)
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      "Eliminar Cuenta",
-      "¿Estás seguro? Esta acción borrará tu acceso y todos tus datos de forma permanente. No se puede deshacer.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        { 
-          text: "Eliminar Definitivamente", 
-          style: "destructive", 
-          onPress: async () => {
-            if (!user) return;
-            setLoading(true);
-            try {
-              // 1. Borrar datos de Firestore (Opcional, pero recomendado para limpieza)
-              await deleteDoc(doc(db, "users", user.uid));
-              
-              // 2. Borrar usuario de Auth
-              await deleteUser(user);
-              
-              // 3. Redirigir
-              router.replace('/login');
-              Alert.alert("Cuenta Eliminada", "Lamentamos verte partir.");
-            } catch (error: any) {
-              setLoading(false);
-              // Firebase pide re-autenticarse si pasó mucho tiempo
-              if (error.code === 'auth/requires-recent-login') {
-                Alert.alert("Seguridad", "Para eliminar tu cuenta, por seguridad debes cerrar sesión y volver a entrar.");
-                await signOut(auth);
-                router.replace('/login');
-              } else {
-                Alert.alert("Error", error.message);
-              }
-            }
-          }
-        }
-      ]
-    );
-  };
+  if (loading) return <ActivityIndicator size="large" color="#000" style={{flex:1}} />;
 
   return (
     <ScrollView style={styles.container}>
+      <Stack.Screen options={{ title: 'Editar Producto' }} />
       
-      {/* HEADER LIMPIO */}
-      <Stack.Screen 
-        options={{ 
-          title: 'Editar Perfil', 
-          headerBackTitle: 'Volver', 
-          headerTitleStyle: { fontWeight: 'bold' } 
-        }} 
-      />
-      
-      <View style={{paddingTop: 20}}>
-        {/* AVATAR */}
-        <View style={styles.avatarSection}>
-          <TouchableOpacity onPress={pickImage} style={styles.avatarContainer}>
-            {photo ? (
-              <Image source={{ uri: photo }} style={styles.avatar} />
-            ) : (
-              <View style={styles.placeholderAvatar}>
-                <Ionicons name="camera" size={40} color="#fff" />
-              </View>
-            )}
-            <View style={styles.editIcon}>
-              <Ionicons name="pencil" size={14} color="white" />
+      <View style={styles.form}>
+        <Text style={styles.label}>Nombre</Text>
+        <TextInput style={styles.input} value={name} onChangeText={setName} />
+
+        <View style={{flexDirection:'row', gap:10}}>
+            <View style={{flex:1}}>
+                <Text style={styles.label}>Precio</Text>
+                <TextInput style={styles.input} value={price} onChangeText={setPrice} keyboardType="numeric" />
             </View>
-          </TouchableOpacity>
-          <Text style={styles.hint}>Toca para cambiar logo</Text>
+            <View style={{flex:1}}>
+                <Text style={styles.label}>Stock</Text>
+                <TextInput style={styles.input} value={stock} onChangeText={setStock} keyboardType="numeric" />
+            </View>
         </View>
 
-        {/* FORMULARIO */}
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nombre del Negocio</Text>
-            <TextInput 
-              style={styles.input} 
-              value={businessName} 
-              onChangeText={setBusinessName} 
-              placeholder="Ej: Zapatos Juan"
-            />
-          </View>
+        <Text style={styles.label}>Categoría</Text>
+        <TextInput style={styles.input} value={category} onChangeText={setCategory} />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Teléfono de Contacto</Text>
-            <TextInput 
-              style={styles.input} 
-              value={phone} 
-              onChangeText={setPhone} 
-              placeholder="Ej: 5555-5555"
-              keyboardType="phone-pad"
-            />
-          </View>
+        <Text style={styles.label}>Descripción</Text>
+        <TextInput style={[styles.input, {height:80}]} value={desc} onChangeText={setDesc} multiline />
 
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.saveText}>Guardar Cambios</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* ZONA DE PELIGRO (ELIMINAR CUENTA) */}
-        <View style={styles.dangerZone}>
-            <Text style={styles.dangerTitle}>Zona de Peligro</Text>
-            <TouchableOpacity 
-               onPress={handleDeleteAccount} 
-               style={styles.deleteBtn}
-               disabled={loading}
-            >
-               <Text style={styles.deleteText}>Eliminar mi Cuenta</Text>
-            </TouchableOpacity>
-            <Text style={styles.dangerSub}>
-                Esta acción es irreversible.
-            </Text>
-        </View>
-
+        <TouchableOpacity style={styles.btn} onPress={handleUpdate} disabled={updating}>
+            <Text style={styles.btnText}>{updating ? "Guardando..." : "Guardar Cambios"}</Text>
+        </TouchableOpacity>
       </View>
-      <View style={{height: 50}} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20 },
-  
-  avatarSection: { alignItems: 'center', marginBottom: 30 },
-  avatarContainer: { position: 'relative' },
-  avatar: { width: 120, height: 120, borderRadius: 60, borderWidth: 3, borderColor: '#f0f0f0' },
-  placeholderAvatar: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center' },
-  editIcon: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#000', padding: 8, borderRadius: 20, borderWidth: 2, borderColor: 'white' },
-  hint: { marginTop: 10, color: '#999', fontSize: 12 },
-
-  form: { marginTop: 10 },
-  inputGroup: { marginBottom: 20 },
-  label: { fontSize: 14, fontWeight: '600', color: '#666', marginBottom: 8 },
-  input: { backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#EEE', borderRadius: 12, padding: 15, fontSize: 16 },
-  
-  saveBtn: { backgroundColor: '#000', padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10 },
-  saveText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
-
-  // Estilos Zona de Peligro
-  dangerZone: { marginTop: 50, borderTopWidth: 1, borderColor: '#eee', paddingTop: 30, alignItems: 'center' },
-  dangerTitle: { color: '#666', fontSize: 12, marginBottom: 15, textTransform: 'uppercase', fontWeight: 'bold' },
-  deleteBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ff4444', paddingVertical: 15, paddingHorizontal: 40, borderRadius: 12, width: '100%', alignItems: 'center' },
-  deleteText: { color: '#ff4444', fontWeight: 'bold', fontSize: 16 },
-  dangerSub: { marginTop: 10, color: '#999', fontSize: 12 }
+  container: { flex: 1, backgroundColor: '#fff', padding: 20 },
+  form: { gap: 15, paddingBottom: 50 },
+  label: { fontWeight: 'bold', color: '#666' },
+  input: { borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 10, backgroundColor: '#f9f9f9', fontSize: 16 },
+  btn: { backgroundColor: '#000', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
 });

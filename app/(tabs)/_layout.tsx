@@ -1,41 +1,52 @@
-import { Stack } from 'expo-router';
-import { useEffect } from 'react';
-import { useFonts } from 'expo-font';
-import * as SplashScreen from 'expo-splash-screen';
+import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
 
-// Mantiene la pantalla de carga visible hasta que la app esté lista
-SplashScreen.preventAutoHideAsync();
-
-export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    ...Ionicons.font, // Carga los iconos antes de iniciar
-  });
-
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return <View />; // Pantalla vacía mientras carga
-  }
-
+export default function TabLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      {/* Definimos las rutas principales sin encabezado global */}
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="register" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <Tabs screenOptions={{ 
+      headerShown: false, // Ocultamos el encabezado gris por defecto
+      tabBarActiveTintColor: '#000', // Color del icono activo (Negro)
+      tabBarInactiveTintColor: '#999', // Color del icono inactivo (Gris)
+      tabBarStyle: {
+        height: 60,
+        paddingBottom: 10,
+        paddingTop: 10,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#f0f0f0',
+        elevation: 0, // Quitar sombra en Android para look limpio
+        shadowOpacity: 0, // Quitar sombra en iOS
+      },
+      tabBarShowLabel: false, // Ocultamos el texto (solo iconos) para que se vea moderno
+    }}>
       
-      {/* Las rutas de admin sí pueden tener encabezado automático o personalizado */}
-      <Stack.Screen name="admin/add" options={{ presentation: 'modal' }} />
-    </Stack>
+      {/* PESTAÑA 1: INVENTARIO */}
+      <Tabs.Screen 
+        name="index" 
+        options={{
+          title: 'Inventario',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{alignItems: 'center', justifyContent: 'center'}}>
+               <Ionicons name={focused ? "grid" : "grid-outline"} size={24} color={color} />
+            </View>
+          ),
+        }} 
+      />
+
+      {/* PESTAÑA 2: PERFIL */}
+      <Tabs.Screen 
+        name="profile" 
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{alignItems: 'center', justifyContent: 'center'}}>
+               <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
+            </View>
+          ),
+        }} 
+      />
+
+    </Tabs>
   );
 }

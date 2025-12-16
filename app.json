@@ -1,12 +1,11 @@
 {
   "expo": {
-    "name": "Revendedores Pro",
+    "name": "revendedores-app",
     "slug": "revendedores-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/revendedores.png",
-    "scheme": "revendedores-app",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/images/revendedores.png",
       "resizeMode": "contain",
@@ -14,45 +13,37 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.carlos.revendedoresapp",
-      "infoPlist": {
-        "LSApplicationQueriesSchemes": [
-          "whatsapp"
-        ]
-      }
+      "bundleIdentifier": "com.carlosramos.ventaspro" 
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/revendedores.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.carlos.revendedoresapp", 
+      "package": "com.carlosramos.ventaspro",
       "permissions": [
-        "INTERNET",
-        "CAMERA", 
-        "READ_EXTERNAL_STORAGE"
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET"
       ]
     },
     "web": {
-      "bundler": "metro",
-      "output": "static",
       "favicon": "./assets/images/revendedores.png"
     },
     "plugins": [
       "expo-router",
-      "expo-image-picker" 
-      // *** IMPORTANTE: QUITAMOS expo-print y expo-sharing ***
-      // Se pueden añadir después cuando el bug se resuelva
+      "expo-image-picker",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permitir acceso para escanear productos."
+        }
+      ]
     ],
-    "experiments": {
-      "typedRoutes": true
-    },
     "extra": {
-      "router": {
-        "origin": false
-      },
       "eas": {
-        "projectId": "79055c60-5e30-430c-ae2e-010505efd479"
+        "projectId": "79055c60-5e30-430c-ae2e-010505efd479" 
       }
     }
   }

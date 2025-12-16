@@ -1,185 +1,225 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Image, Platform 
 } from 'react-native';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 // --- FIREBASE ---
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../../firebaseConfig'; 
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getAuth, updateProfile, deleteUser, signOut } from 'firebase/auth';
+import { db, storage } from '../../../firebaseConfig'; 
 
-export default function EditProductScreen() {
-  const { id } = useLocalSearchParams(); 
+export default function EditProfileScreen() {
   const router = useRouter();
-  
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
-  const [cost, setCost] = useState(''); // <-- NUEVO ESTADO: Costo
-  const [quantity, setQuantity] = useState(''); 
-  const [category, setCategory] = useState('');
-  const [desc, setDesc] = useState('');
+  const auth = getAuth();
+  const user = auth.currentUser;
 
-  // 1. CARGAR DATOS ACTUALES
+  const [loading, setLoading] = useState(false);
+  const [businessName, setBusinessName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [photo, setPhoto] = useState('');
+
+  // 1. CARGAR DATOS EXISTENTES
   useEffect(() => {
-    const fetchProduct = async () => {
-      if (!id) return;
+    const loadData = async () => {
+      if (!user) return;
+      
       try {
-        const docRef = doc(db, "products", id as string);
-        const snapshot = await getDoc(docRef);
-        
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          setName(data.name);
-          setPrice(data.price ? data.price.toString() : '');
-          setCost(data.cost ? data.cost.toString() : ''); // <-- Cargar Costo
-          setQuantity(data.stock ? data.stock.toString() : '0');
-          setCategory(data.category);
-          setDesc(data.description || '');
+        const docRef = doc(db, "users", user.uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setBusinessName(data.businessName || '');
+          setPhone(data.phone || '');
+          setPhoto(data.photoURL || '');
         } else {
-          Alert.alert("Error", "Producto no encontrado");
-          router.back();
+          setBusinessName(user.displayName || '');
+          setPhoto(user.photoURL || '');
         }
-      } catch (error) {
-        console.error(error);
-        Alert.alert("Error", "No se pudieron cargar los datos.");
-      } finally {
-        setLoading(false);
+      } catch (e) {
+        console.log("Error cargando perfil", e);
       }
     };
-    fetchProduct();
-  }, [id]);
+    loadData();
+  }, []);
 
-  // 2. GUARDAR CAMBIOS
-  const handleUpdate = async () => {
-    if (!name || !price || !cost || !quantity) {
-      Alert.alert("Faltan datos", "Nombre, precio, costo y cantidad son obligatorios");
-      return;
-    }
+  // 2. ELEGIR LOGO DESDE GALERÍA
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
 
-    setSaving(true);
-    try {
-      const productRef = doc(db, "products", id as string);
-      
-      await updateDoc(productRef, {
-        name: name,
-        price: parseFloat(price),
-        cost: parseFloat(cost), // <-- Guardar Costo
-        stock: parseInt(quantity),
-        description: desc,
-        updatedAt: serverTimestamp()
-      });
-
-      Alert.alert("¡Actualizado!", "Producto modificado correctamente.");
-      router.replace('/(tabs)'); 
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "No se pudo actualizar.");
-    } finally {
-      setSaving(false);
+    if (!result.canceled) {
+      setPhoto(result.assets[0].uri);
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#000"/>
-      </View>
+  // 3. GUARDAR CAMBIOS
+  const handleSave = async () => {
+    if (!user) return;
+    setLoading(true);
+
+    try {
+      let finalPhotoUrl = photo;
+
+      if (photo && !photo.startsWith('http')) {
+        const response = await fetch(photo);
+        const blob = await response.blob();
+        const filename = `profiles/${user.uid}.jpg`;
+        const storageRef = ref(storage, filename);
+        await uploadBytes(storageRef, blob);
+        finalPhotoUrl = await getDownloadURL(storageRef);
+      }
+
+      await updateProfile(user, {
+        displayName: businessName,
+        photoURL: finalPhotoUrl
+      });
+
+      await setDoc(doc(db, "users", user.uid), {
+        businessName: businessName,
+        phone: phone,
+        photoURL: finalPhotoUrl,
+        email: user.email,
+        updatedAt: new Date()
+      }, { merge: true });
+
+      Alert.alert("¡Éxito!", "Tu perfil de negocio se ha actualizado.");
+      router.replace('/(tabs)/profile');
+
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert("Error", "No se pudo actualizar el perfil. " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 4. ELIMINAR CUENTA (NUEVO)
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Eliminar Cuenta",
+      "¿Estás seguro? Esta acción borrará tu acceso y todos tus datos de forma permanente. No se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { 
+          text: "Eliminar Definitivamente", 
+          style: "destructive", 
+          onPress: async () => {
+            if (!user) return;
+            setLoading(true);
+            try {
+              // 1. Borrar datos de Firestore (Opcional, pero recomendado para limpieza)
+              await deleteDoc(doc(db, "users", user.uid));
+              
+              // 2. Borrar usuario de Auth
+              await deleteUser(user);
+              
+              // 3. Redirigir
+              router.replace('/login');
+              Alert.alert("Cuenta Eliminada", "Lamentamos verte partir.");
+            } catch (error: any) {
+              setLoading(false);
+              // Firebase pide re-autenticarse si pasó mucho tiempo
+              if (error.code === 'auth/requires-recent-login') {
+                Alert.alert("Seguridad", "Para eliminar tu cuenta, por seguridad debes cerrar sesión y volver a entrar.");
+                await signOut(auth);
+                router.replace('/login');
+              } else {
+                Alert.alert("Error", error.message);
+              }
+            }
+          }
+        }
+      ]
     );
-  }
+  };
 
   return (
     <ScrollView style={styles.container}>
       
-      {/* SOLUCIÓN: CONFIGURACIÓN DEL ENCABEZADO */}
+      {/* HEADER LIMPIO */}
       <Stack.Screen 
         options={{ 
-          title: 'Editar Producto', 
+          title: 'Editar Perfil', 
           headerBackTitle: 'Volver', 
           headerTitleStyle: { fontWeight: 'bold' } 
         }} 
       />
       
-      {/* Contenido de la Pantalla */}
       <View style={{paddingTop: 20}}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Nombre</Text>
-          <TextInput 
-            style={styles.input} 
-            value={name} 
-            onChangeText={setName} 
-          />
+        {/* AVATAR */}
+        <View style={styles.avatarSection}>
+          <TouchableOpacity onPress={pickImage} style={styles.avatarContainer}>
+            {photo ? (
+              <Image source={{ uri: photo }} style={styles.avatar} />
+            ) : (
+              <View style={styles.placeholderAvatar}>
+                <Ionicons name="camera" size={40} color="#fff" />
+              </View>
+            )}
+            <View style={styles.editIcon}>
+              <Ionicons name="pencil" size={14} color="white" />
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.hint}>Toca para cambiar logo</Text>
         </View>
 
-        <View style={styles.row}>
-          <View style={[styles.inputGroup, {flex: 1, marginRight: 10}]}>
-            <Text style={styles.label}>Precio Venta (Q)</Text>
+        {/* FORMULARIO */}
+        <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nombre del Negocio</Text>
             <TextInput 
               style={styles.input} 
-              value={price} 
-              onChangeText={setPrice} 
-              keyboardType="numeric" 
+              value={businessName} 
+              onChangeText={setBusinessName} 
+              placeholder="Ej: Zapatos Juan"
             />
           </View>
-          
-          <View style={[styles.inputGroup, {flex: 1}]}>
-            <Text style={styles.label}>Costo (Q)</Text> {/* <-- CAMPO COSTO */}
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Teléfono de Contacto</Text>
             <TextInput 
               style={styles.input} 
-              value={cost} 
-              onChangeText={setCost} 
-              keyboardType="numeric" 
+              value={phone} 
+              onChangeText={setPhone} 
+              placeholder="Ej: 5555-5555"
+              keyboardType="phone-pad"
             />
           </View>
+
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.saveText}>Guardar Cambios</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.row}>
-          <View style={[styles.inputGroup, {flex: 1, marginRight: 10}]}>
-            <Text style={styles.label}>Stock Actual</Text>
-            <TextInput 
-              style={styles.input} 
-              value={quantity} 
-              onChangeText={setQuantity} 
-              keyboardType="numeric" 
-            />
-          </View>
-          
-          <View style={[styles.inputGroup, {flex: 1}]}>
-            <Text style={styles.label}>Categoría</Text>
-            <TextInput 
-              style={[styles.input, {backgroundColor: '#eee', color: '#999'}]} 
-              value={category} 
-              editable={false} 
-            />
-          </View>
+        {/* ZONA DE PELIGRO (ELIMINAR CUENTA) */}
+        <View style={styles.dangerZone}>
+            <Text style={styles.dangerTitle}>Zona de Peligro</Text>
+            <TouchableOpacity 
+               onPress={handleDeleteAccount} 
+               style={styles.deleteBtn}
+               disabled={loading}
+            >
+               <Text style={styles.deleteText}>Eliminar mi Cuenta</Text>
+            </TouchableOpacity>
+            <Text style={styles.dangerSub}>
+                Esta acción es irreversible.
+            </Text>
         </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Descripción</Text>
-          <TextInput 
-            style={[styles.input, {height: 80, textAlignVertical: 'top'}]} 
-            value={desc} 
-            onChangeText={setDesc} 
-            multiline 
-          />
-        </View>
-
-        <TouchableOpacity 
-          style={[styles.saveBtn, saving && {backgroundColor: '#666'}]} 
-          onPress={handleUpdate} 
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveText}>Guardar Cambios</Text>
-          )}
-        </TouchableOpacity>
       </View>
-      
       <View style={{height: 50}} />
     </ScrollView>
   );
@@ -187,13 +227,26 @@ export default function EditProductScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
+  avatarSection: { alignItems: 'center', marginBottom: 30 },
+  avatarContainer: { position: 'relative' },
+  avatar: { width: 120, height: 120, borderRadius: 60, borderWidth: 3, borderColor: '#f0f0f0' },
+  placeholderAvatar: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center' },
+  editIcon: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#000', padding: 8, borderRadius: 20, borderWidth: 2, borderColor: 'white' },
+  hint: { marginTop: 10, color: '#999', fontSize: 12 },
+
+  form: { marginTop: 10 },
   inputGroup: { marginBottom: 20 },
   label: { fontSize: 14, fontWeight: '600', color: '#666', marginBottom: 8 },
   input: { backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#EEE', borderRadius: 12, padding: 15, fontSize: 16 },
-  row: { flexDirection: 'row' },
   
   saveBtn: { backgroundColor: '#000', padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10 },
-  saveText: { color: '#fff', fontWeight: 'bold', fontSize: 18 }
+  saveText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
+
+  // Estilos Zona de Peligro
+  dangerZone: { marginTop: 50, borderTopWidth: 1, borderColor: '#eee', paddingTop: 30, alignItems: 'center' },
+  dangerTitle: { color: '#666', fontSize: 12, marginBottom: 15, textTransform: 'uppercase', fontWeight: 'bold' },
+  deleteBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ff4444', paddingVertical: 15, paddingHorizontal: 40, borderRadius: 12, width: '100%', alignItems: 'center' },
+  deleteText: { color: '#ff4444', fontWeight: 'bold', fontSize: 16 },
+  dangerSub: { marginTop: 10, color: '#999', fontSize: 12 }
 });

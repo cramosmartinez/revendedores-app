@@ -1,46 +1,41 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
 
-export default function TabLayout() {
+// Mantiene la pantalla de carga visible hasta que la app esté lista
+SplashScreen.preventAutoHideAsync();
+
+export default function RootLayout() {
+  const [loaded, error] = useFonts({
+    ...Ionicons.font, // Carga los iconos antes de iniciar
+  });
+
+  useEffect(() => {
+    if (error) throw error;
+  }, [error]);
+
+  useEffect(() => {
+    if (loaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [loaded]);
+
+  if (!loaded) {
+    return <View />; // Pantalla vacía mientras carga
+  }
+
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: '#000', // Color activo (negro)
-        tabBarInactiveTintColor: '#ccc', // Color inactivo (gris)
-        tabBarStyle: {
-            height: 60, // Altura cómoda
-            paddingBottom: 10,
-            paddingTop: 10,
-        },
-        tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: '600'
-        }
-      }}>
+    <Stack screenOptions={{ headerShown: false }}>
+      {/* Definimos las rutas principales sin encabezado global */}
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="register" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       
-      {/* BOTÓN 1: CATÁLOGO */}
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Catálogo',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons size={24} name={focused ? "grid" : "grid-outline"} color={color} />
-          ),
-        }}
-      />
-
-      {/* BOTÓN 2: PERFIL */}
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Mi Negocio',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons size={24} name={focused ? "person" : "person-outline"} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+      {/* Las rutas de admin sí pueden tener encabezado automático o personalizado */}
+      <Stack.Screen name="admin/add" options={{ presentation: 'modal' }} />
+    </Stack>
   );
 }

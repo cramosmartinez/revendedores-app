@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Image, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Image 
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-
-// --- FIREBASE ---
-import { getAuth, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { useRouter, Stack } from 'expo-router';
+import { getAuth, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebaseConfig'; // Asegúrate de que la ruta sea correcta
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -17,33 +15,40 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (name.length === 0 || email.length === 0 || password.length === 0) {
-      Alert.alert("Faltan datos", "Por favor completa todos los campos.");
+    if (!name || !email || !password) {
+      Alert.alert('Faltan datos', 'Por favor completa todos los campos.');
       return;
     }
 
     setLoading(true);
-    const auth = getAuth();
-
     try {
-      // 1. Crear usuario en Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const auth = getAuth();
+      // 1. Crear Usuario en Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const user = userCredential.user;
 
-      // 2. Actualizar el "Display Name" (Nombre visible)
-      await updateProfile(user, {
-        displayName: name
+      // 2. Actualizar nombre visible
+      await updateProfile(user, { displayName: name });
+
+      // 3. Crear documento en Firestore (IMPORTANTE para el Perfil)
+      await setDoc(doc(db, "users", user.uid), {
+        businessName: name, // Usamos el nombre como negocio por defecto
+        email: email,
+        phone: '',
+        photoURL: '',
+        createdAt: serverTimestamp()
       });
 
-      Alert.alert("¡Bienvenido!", "Tu cuenta ha sido creada exitosamente.");
-      // No necesitamos navegar manualmente, el onAuthStateChanged del Login detectará la sesión y redirigirá.
+      Alert.alert("¡Bienvenido!", "Cuenta creada exitosamente.");
+      router.replace('/(tabs)');
+
     } catch (error: any) {
-      setLoading(false);
-      let msg = "No se pudo crear la cuenta.";
-      if (error.code === 'auth/email-already-in-use') msg = "Este correo ya está registrado.";
+      let msg = "No se pudo registrar.";
+      if (error.code === 'auth/email-already-in-use') msg = "Ese correo ya está registrado.";
       if (error.code === 'auth/weak-password') msg = "La contraseña debe tener al menos 6 caracteres.";
-      if (error.code === 'auth/invalid-email') msg = "El correo no es válido.";
-      Alert.alert("Error", msg);
+      Alert.alert('Error', msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -52,79 +57,99 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <StatusBar style="dark" />
-      
-      {/* Botón Volver */}
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-        <Ionicons name="arrow-back" size={24} color="#333" />
-      </TouchableOpacity>
+      {/* OCULTAR BARRA SUPERIOR */}
+      <Stack.Screen options={{ headerShown: false }} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Crear Cuenta</Text>
-          <Text style={styles.subtitle}>Únete al equipo de revendedores</Text>
-        </View>
+      <View style={styles.headerContainer}>
+         <Text style={styles.appTitle}>Crea tu Cuenta</Text>
+         <Text style={styles.appSub}>Empieza a controlar tu negocio hoy</Text>
+      </View>
 
-        <View style={styles.formContainer}>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nombre Completo</Text>
+      <View style={styles.card}>
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nombre del Negocio / Tu Nombre</Text>
             <TextInput 
               style={styles.input} 
-              placeholder="Ej: Juan Pérez"
-              value={name}
-              onChangeText={setName}
+              placeholder="Ej: Tienda de Carlos" 
+              placeholderTextColor="#aaa"
+              value={name} 
+              onChangeText={setName} 
             />
-          </View>
+        </View>
 
-          <View style={styles.inputGroup}>
+        <View style={styles.inputGroup}>
             <Text style={styles.label}>Correo Electrónico</Text>
             <TextInput 
               style={styles.input} 
-              placeholder="ejemplo@correo.com"
-              value={email}
-              onChangeText={setEmail}
+              placeholder="correo@ejemplo.com" 
+              placeholderTextColor="#aaa"
+              value={email} 
+              onChangeText={setEmail} 
               autoCapitalize="none"
               keyboardType="email-address"
             />
-          </View>
+        </View>
 
-          <View style={styles.inputGroup}>
+        <View style={styles.inputGroup}>
             <Text style={styles.label}>Contraseña</Text>
             <TextInput 
               style={styles.input} 
-              placeholder="Mínimo 6 caracteres"
-              value={password}
-              onChangeText={setPassword}
+              placeholder="******" 
+              placeholderTextColor="#aaa"
+              value={password} 
+              onChangeText={setPassword} 
               secureTextEntry
             />
-          </View>
-
-          <TouchableOpacity 
-            style={[styles.btn, loading && { backgroundColor: '#555' }]} 
-            onPress={handleRegister}
-            disabled={loading}
-          >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Registrarme</Text>}
-          </TouchableOpacity>
-
         </View>
-      </ScrollView>
+
+        <TouchableOpacity 
+          style={styles.registerBtn} 
+          onPress={handleRegister} 
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.registerText}>Registrarme</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+            onPress={() => router.back()}
+            style={{marginTop: 20, alignItems: 'center'}}
+        >
+            <Text style={{color: '#666'}}>¿Ya tienes cuenta? <Text style={{fontWeight: 'bold', color: '#007AFF'}}>Inicia Sesión</Text></Text>
+        </TouchableOpacity>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  backBtn: { position: 'absolute', top: 50, left: 20, zIndex: 10, padding: 10, backgroundColor: '#F5F5F5', borderRadius: 20 },
-  scrollContent: { paddingHorizontal: 30, paddingTop: 100, paddingBottom: 50 },
-  header: { marginBottom: 40 },
-  title: { fontSize: 32, fontWeight: 'bold', color: '#111' },
-  subtitle: { fontSize: 16, color: '#666', marginTop: 5 },
-  formContainer: { width: '100%' },
+  container: { flex: 1, backgroundColor: '#333', justifyContent: 'center' },
+  headerContainer: { alignItems: 'center', marginBottom: 30, marginTop: 50 },
+  appTitle: { fontSize: 32, fontWeight: 'bold', color: '#fff', textAlign: 'center' },
+  appSub: { fontSize: 14, color: '#ccc', marginTop: 5, textAlign: 'center' },
+
+  card: { 
+    backgroundColor: '#fff', 
+    borderTopLeftRadius: 30, 
+    borderTopRightRadius: 30, 
+    padding: 30, 
+    flex: 1, // Ocupa el resto de la pantalla
+    shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 10, elevation: 10
+  },
+  
   inputGroup: { marginBottom: 20 },
-  label: { fontSize: 14, color: '#333', marginBottom: 8, fontWeight: 'bold' },
-  input: { backgroundColor: '#F5F6FA', padding: 15, borderRadius: 12, fontSize: 16, borderWidth: 1, borderColor: '#EFEFEF' },
-  btn: { backgroundColor: '#007AFF', padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 20, shadowColor: '#007AFF', shadowOpacity: 0.3, shadowRadius: 10, elevation: 5 },
-  btnText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  label: { fontSize: 12, color: '#666', marginBottom: 5, textTransform: 'uppercase', fontWeight: '600' },
+  input: { 
+    borderWidth: 1, borderColor: '#eee', backgroundColor: '#F9F9F9', 
+    borderRadius: 12, padding: 15, fontSize: 16, color: '#333' 
+  },
+  
+  registerBtn: { 
+    backgroundColor: '#007AFF', padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10,
+    shadowColor: "#000", shadowOpacity: 0.3, shadowOffset: {width: 0, height: 4}, elevation: 5
+  },
+  registerText: { color: '#fff', fontWeight: 'bold', fontSize: 18 }
 });

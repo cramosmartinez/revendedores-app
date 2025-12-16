@@ -1,13 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Platform, Image 
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Image, Dimensions, ScrollView
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-// --- IMPORTS PDF (COMENTADOS TEMPORALMENTE PARA EVITAR ERROR DE BUILD) ---
-// import * as Print from 'expo-print';
-// import * as Sharing from 'expo-sharing';
+import { LineChart } from "react-native-chart-kit"; // <-- IMPORTAR GRÁFICA
 
 // --- FIREBASE IMPORTS ---
 import { 
@@ -18,6 +15,7 @@ import { db } from '../../firebaseConfig';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const screenWidth = Dimensions.get("window").width;
   
   // Estados de Usuario
   const [user, setUser] = useState<any>(null);
@@ -26,8 +24,14 @@ export default function ProfileScreen() {
   // Estados de Pedidos y Métricas
   const [orders, setOrders] = useState<any[]>([]);
   const [totalSold, setTotalSold] = useState(0);
+  const [totalProfit, setTotalProfit] = useState(0); 
   const [pendingPayment, setPendingPayment] = useState(0);
-  const [completedOrders, setCompletedOrders] = useState(0);
+  
+  // Datos para la Gráfica
+  const [chartData, setChartData] = useState<any>({
+    labels: ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"],
+    datasets: [{ data: [0, 0, 0, 0, 0, 0, 0] }]
+  });
 
   // --- CARGA DE DATOS EN TIEMPO REAL 🔴 ---
   useEffect(() => {
@@ -38,50 +42,74 @@ export default function ProfileScreen() {
       if (currentUser) {
         setUser(currentUser);
         
-        // 1. Cargar Perfil de Negocio (Foto, Nombre)
+        // 1. Cargar Perfil
         try {
           const userDoc = await getDoc(doc(db, "users", currentUser.uid));
           if (userDoc.exists()) {
             setUserData(userDoc.data());
           }
-        } catch (e) {
-          console.error("Error cargando perfil", e);
-        }
+        } catch (e) { console.error(e); }
 
-        // 2. Escuchar Pedidos en Vivo
+        // 2. Escuchar Pedidos
         const q = query(collection(db, "orders"), where("userId", "==", currentUser.uid));
         
         unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
           const ordersList: any[] = [];
           let sold = 0;
+          let profit = 0;
           let pending = 0;
-          let count = 0;
+
+          // Variables para gráfica (Últimos 7 días)
+          const today = new Date();
+          const last7Days = Array.from({length: 7}, (_, i) => {
+            const d = new Date();
+            d.setDate(today.getDate() - (6 - i));
+            return d.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+          });
+          const salesByDay = new Array(7).fill(0);
 
           snapshot.forEach((doc) => {
             const data = doc.data();
             const order = { id: doc.id, ...data };
             ordersList.push(order);
             
-            // Cálculos Financieros
+            // Cálculos Financieros Generales
             if (data.status === 'PAGADO') {
               sold += (data.total || 0);
-              count++;
+              profit += (data.profit || 0); 
+              
+              // Lógica para Gráfica: Sumar si es de los últimos 7 días
+              if (data.createdAt?.toDate) {
+                const orderDate = data.createdAt.toDate().toISOString().split('T')[0];
+                const index = last7Days.indexOf(orderDate);
+                if (index !== -1) {
+                    salesByDay[index] += data.total;
+                }
+              }
+
             } else if (data.status === 'PENDIENTE') {
               pending += (data.total || 0);
             }
           });
 
-          // Ordenar por fecha (más reciente primero)
+          // Ordenar lista de pedidos
           ordersList.sort((a: any, b: any) => {
               const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(0);
               const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(0);
               return dateB - dateA; 
           });
 
+          // Actualizar estados
           setTotalSold(sold);
+          setTotalProfit(profit); 
           setPendingPayment(pending);
-          setCompletedOrders(count);
           setOrders(ordersList);
+
+          // Actualizar Gráfica
+          setChartData({
+            labels: ["D-6", "D-5", "D-4", "D-3", "Ayer", "Hoy"], // Etiquetas simplificadas
+            datasets: [{ data: salesByDay.slice(1) }] // Mostramos 6 puntos para que quepa mejor o ajusta labels
+          });
         });
 
       } else {
@@ -103,12 +131,10 @@ export default function ProfileScreen() {
     router.replace('/login');
   };
 
-  // --- CAMBIAR ESTADO DE PEDIDO (Descuenta Stock) ---
   const changeStatus = async (orderId: string, newStatus: string) => {
     try {
       const currentOrder = orders.find(o => o.id === orderId);
       
-      // Si cobramos, descontamos stock
       if (newStatus === 'PAGADO' && currentOrder) {
         for (const item of currentOrder.items) {
            if (item.id) {
@@ -117,39 +143,18 @@ export default function ProfileScreen() {
            }
         }
       }
-
       const orderRef = doc(db, "orders", orderId);
       await updateDoc(orderRef, { status: newStatus });
-
     } catch (error: any) {
       Alert.alert("Error", error.message);
     }
   };
 
-  // --- FUNCIÓN GENERAR PDF (COMENTADA) ---
-  const handlePrintReceipt = async (item: any) => {
-      Alert.alert(
-        "Función Deshabilitada", 
-        "La función de recibos está deshabilitada temporalmente por un error de compilación. Pronto estará activa de nuevo."
-      );
-      // Código original del PDF va aquí
-      /* try {
-          // ... (Lógica de PDF) ...
-          if (Platform.OS === 'web') {
-             await Print.printAsync({ html });
-          } else {
-             const { uri } = await Print.printToFileAsync({ html });
-             await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-          }
-      } catch (error) { ... }
-      */
-  };
-
-  // --- RENDERIZADO DEL ENCABEZADO ---
+  // --- RENDER HEADER CON GRÁFICA ---
   const renderHeader = () => {
     const displayName = userData?.businessName || user?.displayName || "Mi Negocio";
-    const displayEmail = user?.email || "";
     const photoURL = userData?.photoURL || user?.photoURL;
+    const emailInitial = user?.email ? user.email.charAt(0).toUpperCase() : "U";
 
     return (
       <View>
@@ -160,9 +165,7 @@ export default function ProfileScreen() {
                <Image source={{ uri: photoURL }} style={styles.avatarImage} />
              ) : (
                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
-                    {displayEmail.charAt(0).toUpperCase()}
-                  </Text>
+                  <Text style={styles.avatarText}>{emailInitial}</Text>
                </View>
              )}
           </View>
@@ -171,13 +174,10 @@ export default function ProfileScreen() {
             <Text style={styles.welcome}>Bienvenido,</Text>
             <View style={{flexDirection: 'row', alignItems: 'center'}}>
                <Text style={styles.businessName} numberOfLines={1}>{displayName}</Text>
-               
-               {/* BOTÓN LÁPIZ PARA EDITAR PERFIL */}
                <TouchableOpacity onPress={() => router.push('/profile/edit' as any)} style={{marginLeft: 8}}>
                   <Ionicons name="pencil" size={20} color="#007AFF" />
                </TouchableOpacity>
             </View>
-            <Text style={styles.email} numberOfLines={1}>{displayEmail}</Text>
           </View>
           
           <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
@@ -187,21 +187,50 @@ export default function ProfileScreen() {
 
         {/* 2. DASHBOARD FINANCIERO */}
         <View style={styles.dashboardContainer}>
-           <View style={[styles.statCard, {backgroundColor: '#27ae60'}]}>
-              <Text style={styles.statLabel}>Ventas Totales</Text>
-              <Text style={styles.statValue}>Q{totalSold.toFixed(2)}</Text>
-              <Text style={styles.statSub}>{completedOrders} pedidos cerrados</Text>
+           <View style={[styles.statCard, {backgroundColor: '#34495e', flex: 1}]}>
+              <Text style={styles.statLabel}>Ventas</Text>
+              <Text style={styles.statValue}>Q{totalSold.toFixed(0)}</Text>
+              <Text style={styles.statSub}>Total</Text>
            </View>
 
-           <View style={[styles.statCard, {backgroundColor: '#f39c12', marginLeft: 10}]}>
-              <Text style={styles.statLabel}>Por Cobrar</Text>
-              <Text style={styles.statValue}>Q{pendingPayment.toFixed(2)}</Text>
-              <Text style={styles.statSub}>Dinero pendiente</Text>
+           <View style={[styles.statCard, {backgroundColor: '#27ae60', flex: 1.2, marginHorizontal: 8}]}>
+              <Text style={styles.statLabel}>Ganancia</Text>
+              <Text style={[styles.statValue, {fontSize: 26}]}>Q{totalProfit.toFixed(0)}</Text>
+              <Text style={styles.statSub}>Neta</Text>
+           </View>
+
+           <View style={[styles.statCard, {backgroundColor: '#f39c12', flex: 1}]}>
+              <Text style={styles.statLabel}>Cobrar</Text>
+              <Text style={styles.statValue}>Q{pendingPayment.toFixed(0)}</Text>
+              <Text style={styles.statSub}>Pendiente</Text>
            </View>
         </View>
 
-        {/* 3. BOTONES DE HERRAMIENTAS (CLIENTES) */}
-        <View style={{flexDirection: 'row', paddingHorizontal: 20, marginBottom: 20, gap: 10}}>
+        {/* 3. GRÁFICA DE VENTAS (NUEVO) */}
+        <View style={styles.chartContainer}>
+            <Text style={styles.chartTitle}>Tendencia de Ventas (Últimos días)</Text>
+            <LineChart
+                data={chartData}
+                width={screenWidth - 40} // Ancho de pantalla menos padding
+                height={220}
+                yAxisLabel="Q"
+                chartConfig={{
+                  backgroundColor: "#ffffff",
+                  backgroundGradientFrom: "#ffffff",
+                  backgroundGradientTo: "#ffffff",
+                  decimalPlaces: 0,
+                  color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`, // Azul profesional
+                  labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                  style: { borderRadius: 16 },
+                  propsForDots: { r: "6", strokeWidth: "2", stroke: "#007AFF" }
+                }}
+                bezier // Línea curva suave
+                style={{ marginVertical: 8, borderRadius: 16 }}
+            />
+        </View>
+
+        {/* 4. BOTONES DE HERRAMIENTAS */}
+        <View style={{flexDirection: 'row', paddingHorizontal: 20, marginBottom: 20}}>
             <TouchableOpacity 
               onPress={() => router.push('/admin/clients' as any)}
               style={styles.toolBtn}
@@ -212,52 +241,48 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Historial de Movimientos</Text>
-          <Ionicons name="receipt-outline" size={20} color="#666" />
+          <Text style={styles.sectionTitle}>Últimos Movimientos</Text>
         </View>
       </View>
     );
   };
 
-  // --- RENDERIZADO DE PEDIDOS ---
+  // --- RENDER PEDIDOS ---
   const renderOrder = ({ item }: { item: any }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <Text style={styles.date}>
            {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString('es-GT') : 'Reciente'}
         </Text>
-        
-        <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
-            {/* Botón Imprimir (Deshabilitado temporalmente) */}
-            <TouchableOpacity onPress={() => handlePrintReceipt(item)} style={styles.printBtn}>
-               <Ionicons name="print-outline" size={20} color="#555" />
-            </TouchableOpacity>
-
-            <View style={[styles.badge, getBadgeStyle(item.status)]}>
-              <Text style={styles.badgeText}>{item.status}</Text>
-            </View>
+        <View style={[styles.badge, getBadgeStyle(item.status)]}>
+           <Text style={styles.badgeText}>{item.status}</Text>
         </View>
       </View>
 
       <View style={styles.itemsContainer}>
         {item.items?.map((prod: any, index: number) => (
           <Text key={index} style={styles.productText} numberOfLines={1}>
-            • {prod.name}
+            • {prod.name} ({prod.quantity})
           </Text>
         ))}
       </View>
+      
+      {item.clientName && (
+          <Text style={styles.clientText}>👤 {item.clientName}</Text>
+      )}
 
       <View style={styles.divider} />
       
       <View style={styles.cardFooter}>
-        <Text style={styles.methodText}>{item.method || 'Venta'}</Text>
-        <View style={styles.totalContainer}>
-           <Text style={styles.totalLabel}>Total:</Text>
-           <Text style={styles.totalValue}>Q{item.total?.toFixed(2)}</Text>
+        <View>
+            <Text style={styles.methodText}>{item.method || 'Venta'}</Text>
+            {item.status === 'PAGADO' && item.profit !== undefined && (
+                <Text style={styles.profitText}>Ganancia: +Q{item.profit.toFixed(2)}</Text>
+            )}
         </View>
+        <Text style={styles.totalValue}>Q{item.total?.toFixed(2)}</Text>
       </View>
 
-      {/* Botones de Acción */}
       {item.status === 'PENDIENTE' && (
         <View style={styles.actionRow}>
           <TouchableOpacity 
@@ -299,7 +324,7 @@ export default function ProfileScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="cart-outline" size={60} color="#ddd" />
-            <Text style={{color: '#999', marginTop: 10}}>No tienes movimientos registrados.</Text>
+            <Text style={{color: '#999', marginTop: 10}}>Sin movimientos recientes.</Text>
           </View>
         }
       />
@@ -309,55 +334,53 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6F8', paddingTop: 50 },
-  
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingHorizontal: 20 },
   avatarContainer: { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
-  avatarImage: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: '#fff' },
-  avatarPlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
-  avatarText: { color: 'white', fontSize: 24, fontWeight: 'bold' },
+  avatarImage: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#fff' },
+  avatarPlaceholder: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
+  avatarText: { color: 'white', fontSize: 20, fontWeight: 'bold' },
   welcome: { fontSize: 12, color: '#888', textTransform: 'uppercase' },
-  businessName: { fontSize: 20, fontWeight: 'bold', color: '#333' },
-  email: { fontSize: 14, color: '#666' },
+  businessName: { fontSize: 18, fontWeight: 'bold', color: '#333' },
   logoutBtn: { padding: 10 },
   
-  dashboardContainer: { flexDirection: 'row', marginBottom: 20, paddingHorizontal: 20 },
-  statCard: { flex: 1, padding: 15, borderRadius: 16, justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
-  statLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600', textTransform: 'uppercase' },
-  statValue: { color: 'white', fontSize: 24, fontWeight: 'bold', marginVertical: 5 },
-  statSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
+  // Dashboard Cards
+  dashboardContainer: { flexDirection: 'row', marginBottom: 20, paddingHorizontal: 15 },
+  statCard: { padding: 12, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, elevation: 2 },
+  statLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
+  statValue: { color: 'white', fontSize: 18, fontWeight: 'bold', marginVertical: 2 },
+  statSub: { color: 'rgba(255,255,255,0.7)', fontSize: 9 },
 
-  toolBtn: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    backgroundColor: '#333', 
-    padding: 12, 
-    borderRadius: 12, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    gap: 8,
-    shadowColor: '#000', shadowOpacity: 0.1, elevation: 2
+  // Estilos Gráfica
+  chartContainer: { 
+    marginHorizontal: 20, 
+    marginBottom: 20, 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    padding: 10, 
+    shadowColor: '#000', shadowOpacity: 0.05, elevation: 2 
   },
+  chartTitle: { fontSize: 14, fontWeight: 'bold', color: '#666', marginBottom: 5, marginLeft: 10 },
+
+  toolBtn: { flex: 1, flexDirection: 'row', backgroundColor: '#333', padding: 12, borderRadius: 12, justifyContent: 'center', alignItems: 'center', gap: 8, shadowColor: '#000', shadowOpacity: 0.1, elevation: 2 },
   toolBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
 
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 20 },
+  sectionHeader: { marginBottom: 15, paddingHorizontal: 20 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
   list: { paddingBottom: 20 },
   
-  card: { backgroundColor: 'white', borderRadius: 16, padding: 15, marginBottom: 15, marginHorizontal: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, alignItems: 'center' },
-  date: { color: '#888', fontSize: 12, fontWeight: '500' },
-  
-  printBtn: { padding: 6, backgroundColor: '#f0f0f0', borderRadius: 8, marginRight: 5 },
-
+  // Pedido Card
+  card: { backgroundColor: 'white', borderRadius: 16, padding: 15, marginBottom: 15, marginHorizontal: 20, shadowColor: '#000', shadowOpacity: 0.05, elevation: 1 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
+  date: { color: '#888', fontSize: 12 },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  badgeText: { color: '#555', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
-  itemsContainer: { marginBottom: 10 },
-  productText: { fontSize: 15, color: '#444', marginBottom: 2 },
+  badgeText: { color: '#555', fontSize: 10, fontWeight: 'bold' },
+  itemsContainer: { marginBottom: 5 },
+  productText: { fontSize: 14, color: '#444' },
+  clientText: { fontSize: 13, color: '#007AFF', fontStyle: 'italic', marginTop: 4 },
   divider: { height: 1, backgroundColor: '#f0f0f0', marginVertical: 8 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  methodText: { fontSize: 12, color: '#999', fontStyle: 'italic' },
-  totalContainer: { flexDirection: 'row', alignItems: 'center' },
-  totalLabel: { fontSize: 14, fontWeight: '600', color: '#666', marginRight: 5 },
+  methodText: { fontSize: 12, color: '#999' },
+  profitText: { fontSize: 11, color: '#27ae60', fontWeight: 'bold' },
   totalValue: { fontSize: 18, fontWeight: 'bold', color: '#333' },
   
   actionRow: { flexDirection: 'row', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderColor: '#f9f9f9', gap: 10 },
